@@ -1,0 +1,15 @@
+resources:
+  - name: repository-source
+    type: git
+    source:
+      uri: https://github.com/ProvoK/example-python-project.git
+
+
+jobs:
+  - name: linting
+    plan:
+      - get: repository-source
+        trigger: true
+      - task: lint
+        pass: tasks/python-linting.yml
+
