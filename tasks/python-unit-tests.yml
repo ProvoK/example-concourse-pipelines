@@ -19,4 +19,4 @@ run:
         pip install poetry
         cd source-code
         poetry install
-        poetry run flake8
+        poetry run pytest -m 'not integration'

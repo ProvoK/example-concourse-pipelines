@@ -1,0 +1,26 @@
+---
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: "amidos/dcind"
+    tag: "latest"
+
+inputs:
+  - name: source-code
+
+
+run:
+  path: sh
+  args:
+    - '-exc'
+    - |
+      source /docker-lib.sh
+      start_docker
+
+      cd source-code
+
+      docker-compose up -d
+      docker-compose exec app poetry run pytest -m 'integration'
+      docker-compose down
