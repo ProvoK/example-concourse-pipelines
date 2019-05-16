@@ -1,0 +1,133 @@
+resource_types:
+- name: slack-notification
+  type: docker-image
+  source:
+    repository: cfcommunity/slack-notification-resource
+    tag: latest
+
+
+resources:
+  - name: repository-source
+    type: git
+    source:
+      uri: git@github.com:ProvoK/example-python-project.git
+      branch: master
+      private_key: ((github-private-key))
+
+  - name: repository-source-tagged
+    type: git
+    source:
+      uri: git@github.com:ProvoK/example-python-project.git
+      tag_filter: '*'
+      private_key: ((github-private-key))
+
+  - name: repository-tasks
+    type: git
+    source:
+      uri: git@github.com:ProvoK/example-concourse-pipelines.git
+      branch: master
+      private_key: ((github-private-key))
+
+  - name: app-repository
+    type: docker-image
+    source:
+      aws_access_key_id: ((aws_access_key_id))
+      aws_secret_access_key: ((aws_secret_access_key))
+      repository: ((aws_ecr_registry))
+
+  - name: notify-slack
+    type: slack-notification
+    source:
+      url: ((slack-url))
+
+
+jobs:
+  - name: deploy-latest
+    serial: true
+    plan:
+      - aggregate:
+        - get: repository-source
+          trigger: true
+        - get: repository-tasks
+
+      - task: lint
+        input_mapping:
+          source-code: repository-source
+        file: repository-tasks/tasks/python-linting.yml
+
+      - aggregate:
+        - task: unit_tests
+          input_mapping:
+            source-code: repository-source
+          file: repository-tasks/tasks/python-unit-tests.yml
+        - task: integration_tests
+          privileged: true
+          input_mapping:
+            source-code: repository-source
+          file: repository-tasks/tasks/python-integration-tests.yml
+
+      - put: app-repository
+        params:
+          build: "repository-source"
+  - name: deploy-tagged
+    serial: true
+    plan:
+      - aggregate:
+        - get: repository-source-tagged
+          trigger: true
+        - get: repository-tasks
+
+      - task: lint
+        input_mapping:
+          source-code: repository-source-tagged
+        file: repository-tasks/tasks/python-linting.yml
+
+      - aggregate:
+        - task: unit_tests
+          input_mapping:
+            source-code: repository-source-tagged
+          file: repository-tasks/tasks/python-unit-tests.yml
+        - task: integration_tests
+          privileged: true
+          input_mapping:
+            source-code: repository-source-tagged
+          file: repository-tasks/tasks/python-integration-tests.yml
+
+      - task: touch-version-file
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: alpine/git
+          inputs:
+            - name: repository-source-tagged
+          outputs:
+            - name: touch-version-file
+          run:
+            path: sh
+            args:
+              - '-exc'
+              - |
+                  cd repository-source-tagged
+                  VERSION=$(git tag -l | head -n 1 | xargs echo -n)
+                  echo Detected version $VERSION
+
+                  echo $VERSION > ../touch-version-file/version
+      - put: app-repository
+        params:
+          build: "repository-source-tagged"
+          tag_file: "touch-version-file/version"
+        on_success:
+          put: notify-slack
+          params:
+            text: 'Image succesfully pushed!'
+        on_failure:
+          put: notify-slack
+          params:
+            text: 'Image succesfully pushed!'
+
+
+
+
+

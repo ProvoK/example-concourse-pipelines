@@ -1,0 +1,19 @@
+---
+platform: linux
+image_resource:
+  type: docker-image
+  source:
+    repository: alpine/git
+inputs:
+  - name: source-code-tagged
+outputs:
+  - name: version-file
+run:
+  path: sh
+  args:
+    - '-exc'
+    - |
+        cd source-code-tagged
+        VERSION=$(git tag -l | head -n 1 | xargs echo -n)
+        echo Detected version $VERSION
+        echo $VERSION > ../version-file/version
